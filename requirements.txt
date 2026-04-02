@@ -1,0 +1,9 @@
+python-fasthtml
+google-genai
+python-dotenv
+# Avoids storage3 -> pyiceberg build requirement on Windows.
+supabase==2.22.4
+langchain-huggingface
+langchain-text-splitters
+sentence-transformers
+PyMuPDF

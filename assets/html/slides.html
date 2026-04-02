@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Slides | Jarbas</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet" />
+
+    <link rel="stylesheet" href="/assets/css/styles.css" />
+</head>
+
+<body data-material-category="slides">
+    <canvas id="neural-bg" aria-hidden="true"></canvas>
+
+    <div class="page-layer">
+        <header class="navbar">
+            <a class="navbar-brand" href="/">J.A.R.B.A.S</a>
+            <nav class="navbar-links" aria-label="Navegacao principal">
+                <a class="navbar-link is-active" href="/slides">Slides</a>
+                <a class="navbar-link" href="/material-complementar">Material Complementar</a>
+                <a class="navbar-link" href="/leituras-recomendadas">Leituras Recomendadas</a>
+            </nav>
+            <a class="btn-outline navbar-action" href="/">Nova conversa</a>
+        </header>
+
+        <main class="resources-layout">
+            <section class="hero-copy resources-copy">
+                <span class="badge">Biblioteca GT GenAI</span>
+                <h1 class="title-main">
+                    <span class="title-gradient">Slides</span> do curso
+                </h1>
+                <p class="body-text">
+                    Clique em um card para baixar o arquivo correspondente no Supabase. Materiais ainda nao
+                    publicados aparecem como Em breve.
+                </p>
+            </section>
+
+            <section class="resources-panel" aria-label="Lista de slides">
+                <div class="resources-head">
+                    <p class="label-tag">Materiais disponiveis</p>
+                    <p class="chat-status" id="materials-status">Carregando materiais...</p>
+                </div>
+                <div class="materials-grid" id="materials-grid"></div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/assets/js/materials.js"></script>
+</body>
+
+</html>

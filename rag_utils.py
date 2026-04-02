@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 class RAGEngine:
     def __init__(self):
         self.supabase = create_client(
@@ -14,10 +15,30 @@ class RAGEngine:
         self.embeddings_model = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
+        self.target_embedding_dim = int(
+            os.environ.get("TARGET_EMBEDDING_DIM", "1536"))
+        self._dim_warning_printed = False
         print("RAG Engine inicializado com sucesso.", flush=True)
+
+    def _normalize_embedding_dimension(self, vector):
+        current_dim = len(vector)
+        if current_dim == self.target_embedding_dim:
+            return vector
+
+        if not self._dim_warning_printed:
+            print(
+                f"Aviso: embedding de busca com {current_dim} dimensoes; ajustando para {self.target_embedding_dim} para compatibilidade com o banco.",
+                flush=True,
+            )
+            self._dim_warning_printed = True
+
+        if current_dim > self.target_embedding_dim:
+            return vector[:self.target_embedding_dim]
+        return vector + [0.0] * (self.target_embedding_dim - current_dim)
 
     def buscar_contexto(self, query, doc_type=None, k=5):
         embedding = self.embeddings_model.embed_query(query)
+        embedding = self._normalize_embedding_dimension(embedding)
 
         params = {"query_embedding": embedding, "match_count": k}
         if doc_type:

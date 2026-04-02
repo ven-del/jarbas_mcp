@@ -1,10 +1,10 @@
 # Jarbas
 
-Assistente de IA Generativa com interface web, RAG com Supabase e integração com Gemini.
+O amado assistente de IA Generativa com interface web, RAG com Supabase e integração com Gemini.
 
 ## Visao geral
 
-O Jarbas e um assistente para apoiar estudos em IA Generativa. O projeto possui:
+O Jarbas é um assistente para apoiar estudos em IA Generativa. O projeto possui:
 - Chat web para perguntas e respostas com contexto da base vetorial.
 - Listagem e download de materiais (slides, material complementar e leituras).
 - Pipeline de ingestao para upload de arquivos e indexacao vetorial de PDFs.
@@ -29,7 +29,7 @@ O Jarbas e um assistente para apoiar estudos em IA Generativa. O projeto possui:
 - `persona.md`: instrucoes de persona do assistente.
 - `assets/`: frontend estatico (paginas, estilos e scripts).
 
-## Variaveis de ambiente
+## Variáveis de ambiente
 
 Crie um arquivo `.env` na raiz do projeto com os valores necessarios:
 
@@ -51,20 +51,20 @@ SUPABASE_MATERIALS_FOLDER=pdfs
 
 ## Como rodar localmente (sem Docker)
 
-1. Criar e ativar ambiente virtual.
+1. Criar e ativar ambiente virtual:
 
 ```bash
 python -m venv venv
 source venv/Scripts/activate
 ```
 
-2. Instalar dependencias.
+2. Instalar dependências:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Iniciar o servidor.
+3. Iniciar o servidor:
 
 ```bash
 python jarbas.py
@@ -77,7 +77,7 @@ python jarbas.py
 ## Como rodar com Docker Compose
 
 1. Garanta que o arquivo `.env` existe na raiz.
-2. Suba a aplicacao:
+2. Suba a aplicação:
 
 ```bash
 docker compose up --build
@@ -87,9 +87,9 @@ docker compose up --build
 
 - http://localhost:5001
 
-### Executar ingestao via Compose (opcional)
+### Executar ingestão via Compose (opcional)
 
-A ingestao foi separada em um servico com profile para execucao sob demanda.
+A ingestão foi separada em um serviço com profile para execução sob demanda.
 
 ```bash
 docker compose --profile ingest run --rm ingest

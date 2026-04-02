@@ -28,10 +28,20 @@ body {
 body {
     font-family: "Inter", sans-serif;
     color: var(--text-primary);
-    background: radial-gradient(ellipse at 20% 50%,
-            var(--bg-dark-green) 0%,
-            #0a1628 40%,
-            var(--bg-dark-purple) 100%);
+    background:
+        radial-gradient(circle at 12% 9%,
+            rgba(0, 229, 200, 0.3) 0%,
+            rgba(0, 229, 200, 0.16) 10%,
+            rgba(0, 229, 200, 0) 26%),
+        radial-gradient(circle at 51% 62%,
+            rgba(95, 122, 255, 0.24) 0%,
+            rgba(118, 85, 235, 0.14) 11%,
+            rgba(118, 85, 235, 0) 27%),
+        radial-gradient(circle at 93% 96%,
+            rgba(224, 0, 122, 0.25) 0%,
+            rgba(224, 0, 122, 0.12) 9%,
+            rgba(224, 0, 122, 0) 22%),
+        linear-gradient(145deg, #050c18 0%, #080b18 52%, #12081c 100%);
     overflow-x: hidden;
 }
 

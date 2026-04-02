@@ -1,5 +1,6 @@
 import pathlib
 import os
+import re
 import fitz
 from supabase import create_client
 from storage3.exceptions import StorageApiError
@@ -18,9 +19,13 @@ if not SUPABASE_URL or not SUPABASE_KEY:
         "Defina SUPABASE_URL e SUPABASE_KEY (ou SUPABASE_SERVICE_ROLE_KEY) no .env")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+MATERIALS_BUCKET = os.environ.get("SUPABASE_MATERIALS_BUCKET", "course-docs")
+STORAGE_ROOT = os.environ.get("SUPABASE_MATERIALS_ROOT", "docs")
 embeddings_model = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2")
 TARGET_EMBEDDING_DIM = int(os.environ.get("TARGET_EMBEDDING_DIM", "1536"))
+MODULE_PATTERN = re.compile(r"modulo[\s_-]*(\d+)", re.IGNORECASE)
+UPLOAD_EXTENSIONS = {".pdf", ".ppt", ".pptx"}
 
 DOCS_DIR = pathlib.Path(__file__).parent / "docs"
 
@@ -51,23 +56,44 @@ def embed(text):
     return normalize_embedding_dimension(vector, TARGET_EMBEDDING_DIM)
 
 
+def build_storage_path(local_path):
+    relative_path = local_path.relative_to(DOCS_DIR).as_posix()
+    root = STORAGE_ROOT.strip("/")
+    if not root:
+        return relative_path
+    return f"{root}/{relative_path}"
+
+
+def infer_module(local_path):
+    relative_parts = [part.lower()
+                      for part in local_path.relative_to(DOCS_DIR).parts]
+    for part in relative_parts:
+        match = MODULE_PATTERN.search(part)
+        if match:
+            return f"modulo_{int(match.group(1))}"
+
+    if relative_parts:
+        return relative_parts[0].replace("-", "_")
+
+    return "material_apoio"
+
+
 def upload_file(local_path):
-    safe_name = local_path.name.replace(" ", "_").replace("(", "").replace(")", "")
-    storage_path = f"pdfs/{safe_name}"
+    storage_path = build_storage_path(local_path)
     try:
         with open(local_path, "rb") as f:
-            supabase.storage.from_("course-docs").upload(
+            supabase.storage.from_(MATERIALS_BUCKET).upload(
                 storage_path, f, {"upsert": "true"}
             )
-        public_url = supabase.storage.from_(
-            "course-docs").get_public_url(storage_path)
+        public_url = supabase.storage.from_(MATERIALS_BUCKET).get_public_url(
+            storage_path)
         if isinstance(public_url, dict):
             return public_url.get("publicUrl") or public_url.get("publicURL")
         return public_url
     except StorageApiError as exc:
         print(
-            "Aviso: nao foi possivel enviar PDF ao Supabase Storage. "
-            "Verifique policy do bucket 'course-docs' ou use SUPABASE_SERVICE_ROLE_KEY. "
+            "Aviso: nao foi possivel enviar arquivo ao Supabase Storage. "
+            f"Verifique policy do bucket '{MATERIALS_BUCKET}' ou use SUPABASE_SERVICE_ROLE_KEY. "
             f"Detalhe: {exc}"
         )
         return None
@@ -76,6 +102,10 @@ def upload_file(local_path):
 def ingest_pdf(path):
     print(f"Processando: {path.name}")
     url = upload_file(path)
+
+    if url:
+        # Evita duplicacao quando o mesmo PDF eh reprocessado.
+        supabase.table("documents").delete().eq("storage_url", url).execute()
 
     doc = fitz.open(str(path))
     text = "\n".join(page.get_text() for page in doc)
@@ -90,7 +120,7 @@ def ingest_pdf(path):
             "content": chunk,
             "doc_type": "pdf",
             "storage_url": url or "",
-            "module": "material_apoio",
+            "module": infer_module(path),
             "embedding": embed(chunk)
         }
         supabase.table("documents").insert(row).execute()
@@ -98,6 +128,23 @@ def ingest_pdf(path):
     print(f"  -> {len(chunks)} chunks salvos")
 
 
+def upload_non_pdf(path):
+    print(f"Processando: {path.name}")
+    url = upload_file(path)
+
+    if url:
+        print("  -> upload concluido (sem ingestao vetorial para esta extensao)")
+    else:
+        print("  -> falha no upload")
+
+
 if __name__ == "__main__":
-    for pdf in DOCS_DIR.glob("*.pdf"):
-        ingest_pdf(pdf)
+    for material in sorted(DOCS_DIR.rglob("*")):
+        if not material.is_file() or material.suffix.lower() not in UPLOAD_EXTENSIONS:
+            continue
+
+        if material.suffix.lower() == ".pdf":
+            ingest_pdf(material)
+            continue
+
+        upload_non_pdf(material)

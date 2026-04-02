@@ -16,7 +16,13 @@ function createCard(item) {
     card.className = `material-card ${item.available ? "is-available" : "is-unavailable"}`;
 
     if (item.available) {
-        card.href = `${DOWNLOAD_ENDPOINT}?file=${encodeURIComponent(item.file_name)}`;
+        const filePath = typeof item.file_path === "string" ? item.file_path : "";
+        const fileName = typeof item.file_name === "string" ? item.file_name : "";
+        const query = filePath
+            ? `path=${encodeURIComponent(filePath)}`
+            : `file=${encodeURIComponent(fileName)}`;
+
+        card.href = `${DOWNLOAD_ENDPOINT}?${query}`;
         card.setAttribute("aria-label", `Baixar ${item.title}`);
     }
 
@@ -26,7 +32,7 @@ function createCard(item) {
 
     const type = document.createElement("p");
     type.className = "material-type";
-    type.textContent = "PDF";
+    type.textContent = String(item.file_type || "ARQUIVO").toUpperCase();
 
     const action = document.createElement("p");
     action.className = "material-action";
@@ -37,6 +43,58 @@ function createCard(item) {
     card.appendChild(action);
 
     return card;
+}
+
+function getModuleOrder(moduleLabel) {
+    const match = /modulo[\s_-]*(\d+)/i.exec(moduleLabel || "");
+    if (!match) {
+        return Number.MAX_SAFE_INTEGER;
+    }
+
+    const value = Number.parseInt(match[1], 10);
+    return Number.isNaN(value) ? Number.MAX_SAFE_INTEGER : value;
+}
+
+function groupItemsByModule(items) {
+    const groups = new Map();
+
+    items.forEach((item) => {
+        const moduleLabel = String(item.module || "").trim() || "";
+        if (!groups.has(moduleLabel)) {
+            groups.set(moduleLabel, []);
+        }
+        groups.get(moduleLabel).push(item);
+    });
+
+    return Array.from(groups.entries())
+        .sort((a, b) => {
+            const orderDiff = getModuleOrder(a[0]) - getModuleOrder(b[0]);
+            if (orderDiff !== 0) {
+                return orderDiff;
+            }
+            return a[0].localeCompare(b[0], "pt-BR", { sensitivity: "base" });
+        });
+}
+
+function renderModuleSection(moduleLabel, items) {
+    const section = document.createElement("section");
+    section.className = "materials-module";
+
+    const label = document.createElement("p");
+    label.className = "module-label";
+    label.textContent = moduleLabel;
+
+    const grid = document.createElement("div");
+    grid.className = "materials-module-grid";
+
+    items.forEach((item) => {
+        grid.appendChild(createCard(item));
+    });
+
+    section.appendChild(label);
+    section.appendChild(grid);
+
+    return section;
 }
 
 function renderErrorCard(message) {
@@ -85,8 +143,9 @@ async function loadMaterials() {
         const items = Array.isArray(payload.items) ? payload.items : [];
 
         materialsGrid.innerHTML = "";
-        items.forEach((item) => {
-            materialsGrid.appendChild(createCard(item));
+        const moduleGroups = groupItemsByModule(items);
+        moduleGroups.forEach(([moduleLabel, moduleItems]) => {
+            materialsGrid.appendChild(renderModuleSection(moduleLabel, moduleItems));
         });
 
         const availableCount = items.filter((item) => item.available).length;
@@ -102,7 +161,7 @@ async function loadMaterials() {
             return;
         }
 
-        setStatus(`${availableCount} materiais disponiveis`);
+        setStatus(`${availableCount} materiais disponiveis em ${moduleGroups.length} modulos`);
     } catch (error) {
         const message = error instanceof Error ? error.message : "Falha inesperada.";
         setStatus("Falha ao carregar materiais");

@@ -206,6 +206,30 @@ body {
 
 .materials-grid {
     display: grid;
+    gap: 1rem;
+}
+
+.materials-module {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.materials-module+.materials-module {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 0.95rem;
+}
+
+.module-label {
+    margin: 0;
+    font-family: "Orbitron", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent-cyan);
+}
+
+.materials-module-grid {
+    display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.95rem;
 }
@@ -439,6 +463,19 @@ body {
     border: 0;
 }
 
+.page-layer>.site-footer {
+    margin-top: auto;
+    width: 100%;
+    align-self: stretch;
+    display: block;
+    text-align: center !important;
+    font-family: "Inter", sans-serif;
+    font-size: 0.72rem !important;
+    line-height: 1.35;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+}
+
 @keyframes rise-in {
     from {
         opacity: 0;
@@ -472,7 +509,7 @@ body {
 }
 
 @media (max-width: 1100px) {
-    .materials-grid {
+    .materials-module-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
@@ -498,7 +535,7 @@ body {
         grid-area: action;
     }
 
-    .materials-grid {
+    .materials-module-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
@@ -546,7 +583,12 @@ body {
         gap: 0.35rem;
     }
 
-    .materials-grid {
+    .materials-module-grid {
         grid-template-columns: 1fr;
+    }
+
+    .page-layer>.site-footer {
+        font-size: 0.66rem;
+        padding-bottom: 0.9rem;
     }
 }

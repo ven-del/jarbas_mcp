@@ -1,0 +1,32 @@
+# VCS
+.git
+.gitignore
+
+# Python cache/build
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+build/
+dist/
+*.egg-info/
+
+# Local environments
+venv/
+.env
+.env.*
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local runtime artifacts
+*.log
+.sesskey

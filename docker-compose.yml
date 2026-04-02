@@ -1,0 +1,31 @@
+services:
+  jarbas:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jarbas-app
+    env_file:
+      - .env
+    environment:
+      PORT: 5001
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "5001:5001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jarbas-ingest
+    env_file:
+      - .env
+    command: ["python", "ingest.py"]
+    profiles:
+      - ingest

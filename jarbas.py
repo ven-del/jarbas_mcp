@@ -1,4 +1,5 @@
 import asyncio
+import mimetypes
 import os
 import re
 import unicodedata
@@ -25,12 +26,20 @@ MATERIAL_FILE = HTML_DIR / "material-complementar.html"
 READINGS_FILE = HTML_DIR / "leituras-recomendadas.html"
 SYSTEM_PROMPT_FILE = BASE_DIR / "persona.md"
 MATERIALS_BUCKET = os.getenv("SUPABASE_MATERIALS_BUCKET", "course-docs")
-MATERIALS_FOLDER = os.getenv("SUPABASE_MATERIALS_FOLDER", "pdfs")
-MATERIALS_CATEGORIES = {
-    "slides",
-    "material-complementar",
-    "leituras-recomendadas",
+MATERIALS_ROOT_FOLDER = os.getenv("SUPABASE_MATERIALS_ROOT", "docs")
+LEGACY_MATERIALS_FOLDER = os.getenv("SUPABASE_MATERIALS_FOLDER", "pdfs")
+MATERIALS_CATEGORY_FOLDERS = {
+    "slides": "slides",
+    "material-complementar": "pdfs",
+    "leituras-recomendadas": "leitura",
 }
+MATERIALS_ALLOWED_EXTENSIONS = {
+    "slides": {".pdf", ".ppt", ".pptx"},
+    "material-complementar": {".pdf"},
+    "leituras-recomendadas": {".pdf"},
+}
+MATERIALS_CATEGORIES = set(MATERIALS_CATEGORY_FOLDERS.keys())
+MODULE_PATTERN = re.compile(r"modulo[\s_-]*(\d+)", re.IGNORECASE)
 
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
@@ -55,74 +64,189 @@ def _slugify(value):
     return re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-")
 
 
-def _material_title_from_name(file_name):
-    return Path(file_name).stem.replace("_", " ").strip()
+def _join_storage_path(*parts):
+    normalized_parts = []
+    for part in parts:
+        value = str(part or "").replace("\\", "/").strip("/")
+        if value:
+            normalized_parts.append(value)
+    return "/".join(normalized_parts)
 
 
-def _material_category_from_title(title):
-    slug = _slugify(title)
-    if slug.startswith("ebook-"):
-        return "material-complementar"
-    if slug.startswith("guia-rapido"):
-        return "leituras-recomendadas"
-    if slug.startswith("slides-") or slug.startswith("slide-"):
-        return "slides"
-    return "material-complementar"
-
-
-def _list_storage_pdf_names():
-    raw_items = rag_engine.supabase.storage.from_(MATERIALS_BUCKET).list(
-        MATERIALS_FOLDER,
-        {
-            "limit": 300,
-            "offset": 0,
-            "sortBy": {"column": "name", "order": "asc"},
-        },
+def _normalize_storage_path(path):
+    return "/".join(
+        segment
+        for segment in str(path or "").replace("\\", "/").split("/")
+        if segment not in {"", "."}
     )
 
-    if isinstance(raw_items, dict) and isinstance(raw_items.get("data"), list):
-        raw_items = raw_items["data"]
 
-    pdf_names = []
-    for item in raw_items or []:
-        name = str(item.get("name", "")).strip()
-        if name.lower().endswith(".pdf"):
-            pdf_names.append(name)
+def _material_title_from_name(file_name):
+    title = Path(file_name).stem.replace("_", " ").strip()
+    if title.lower().endswith(".docx"):
+        title = title[:-5].strip()
+    if title.lower().endswith(".pptx"):
+        title = title[:-5].strip()
+    return title
 
-    return pdf_names
+
+def _material_module_from_path(storage_path):
+    for segment in _normalize_storage_path(storage_path).split("/"):
+        match = MODULE_PATTERN.search(segment.lower())
+        if match:
+            return f"Modulo {int(match.group(1))}"
+    return "Sem modulo"
+
+
+def _material_file_type_from_path(storage_path):
+    extension = Path(storage_path).suffix.lower().replace(".", "")
+    return extension.upper() if extension else "ARQUIVO"
+
+
+def _allowed_extensions_for_category(category):
+    return MATERIALS_ALLOWED_EXTENSIONS.get(category, {".pdf"})
+
+
+def _media_type_for_storage_path(storage_path):
+    extension = Path(storage_path).suffix.lower()
+    if extension == ".pdf":
+        return "application/pdf"
+    if extension == ".ppt":
+        return "application/vnd.ms-powerpoint"
+    if extension == ".pptx":
+        return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+    guessed_type, _ = mimetypes.guess_type(storage_path)
+    return guessed_type or "application/octet-stream"
+
+
+def _material_sort_key(item):
+    module = str(item.get("module", "")).lower()
+    match = MODULE_PATTERN.search(module)
+    module_number = int(match.group(1)) if match else 999
+    return (module_number, module, item["title"].lower())
+
+
+def _category_storage_roots(category):
+    category_folder = MATERIALS_CATEGORY_FOLDERS[category]
+    roots = []
+
+    if MATERIALS_ROOT_FOLDER:
+        roots.append(_join_storage_path(
+            MATERIALS_ROOT_FOLDER, category_folder))
+
+    roots.append(_normalize_storage_path(category_folder))
+
+    if category == "material-complementar" and LEGACY_MATERIALS_FOLDER:
+        roots.append(_normalize_storage_path(LEGACY_MATERIALS_FOLDER))
+
+    deduped = []
+    seen = set()
+    for root in roots:
+        if not root or root in seen:
+            continue
+        deduped.append(root)
+        seen.add(root)
+
+    return deduped
+
+
+def _is_allowed_storage_path(storage_path):
+    normalized_path = _normalize_storage_path(storage_path).lower()
+    extension = Path(normalized_path).suffix.lower()
+    if not extension:
+        return False
+
+    if ".." in normalized_path.split("/"):
+        return False
+
+    for category in MATERIALS_CATEGORIES:
+        for root in _category_storage_roots(category):
+            normalized_root = _normalize_storage_path(root).lower()
+            if (
+                normalized_path == normalized_root
+                or normalized_path.startswith(f"{normalized_root}/")
+            ):
+                return extension in _allowed_extensions_for_category(category)
+
+    return False
+
+
+def _list_storage_document_paths(category):
+    allowed_extensions = _allowed_extensions_for_category(category)
+
+    def _list_folder(path):
+        try:
+            raw_items = rag_engine.supabase.storage.from_(MATERIALS_BUCKET).list(
+                path,
+                {
+                    "limit": 300,
+                    "offset": 0,
+                    "sortBy": {"column": "name", "order": "asc"},
+                },
+            )
+        except Exception:
+            return []
+
+        if isinstance(raw_items, dict) and isinstance(raw_items.get("data"), list):
+            return raw_items["data"]
+
+        return raw_items or []
+
+    for root in _category_storage_roots(category):
+        queue = [root]
+        visited = set()
+        document_paths = []
+
+        while queue:
+            current_folder = _normalize_storage_path(queue.pop(0))
+            if not current_folder or current_folder in visited:
+                continue
+
+            visited.add(current_folder)
+
+            for item in _list_folder(current_folder):
+                name = str(item.get("name", "")).strip()
+                if not name:
+                    continue
+
+                full_path = _join_storage_path(current_folder, name)
+                extension = Path(name).suffix.lower()
+                if extension in allowed_extensions:
+                    document_paths.append(full_path)
+                    continue
+
+                metadata = item.get("metadata")
+                if metadata is None or "." not in name:
+                    queue.append(full_path)
+
+        if document_paths:
+            return sorted(set(document_paths), key=lambda value: value.lower())
+
+    return []
 
 
 def _build_material_items(category):
     items = []
 
-    for file_name in _list_storage_pdf_names():
+    for storage_path in _list_storage_document_paths(category):
+        file_name = Path(storage_path).name
         title = _material_title_from_name(file_name)
-        if _material_category_from_title(title) != category:
-            continue
 
         items.append(
             {
-                "id": _slugify(file_name),
+                "id": _slugify(storage_path),
                 "title": title,
                 "status": "Disponivel",
                 "available": True,
                 "file_name": file_name,
+                "file_path": storage_path,
+                "file_type": _material_file_type_from_path(storage_path),
+                "module": _material_module_from_path(storage_path),
             }
         )
 
-    items.sort(key=lambda value: value["title"].lower())
-
-    target_count = 4 if not items else ((len(items) + 3) // 4) * 4
-    for index in range(target_count - len(items)):
-        items.append(
-            {
-                "id": f"placeholder-{index + 1}",
-                "title": "Material em breve",
-                "status": "Em breve",
-                "available": False,
-                "file_name": "",
-            }
-        )
+    items.sort(key=_material_sort_key)
 
     return items
 
@@ -233,11 +357,20 @@ async def materials_api(request: Request):
 
 @rt("/api/materials/download")
 async def download_material_api(request: Request):
-    file_name = Path(str(request.query_params.get("file", "")).strip()).name
-    if not file_name or not file_name.lower().endswith(".pdf"):
+    storage_path_param = str(request.query_params.get("path", "")).strip()
+    legacy_file_name = Path(
+        str(request.query_params.get("file", "")).strip()).name
+
+    if storage_path_param:
+        storage_path = _normalize_storage_path(storage_path_param)
+    elif legacy_file_name and Path(legacy_file_name).suffix.lower() in {".pdf", ".ppt", ".pptx"}:
+        storage_path = _join_storage_path(
+            LEGACY_MATERIALS_FOLDER, legacy_file_name)
+    else:
         return JSONResponse({"error": "Arquivo invalido."}, status_code=400)
 
-    storage_path = f"{MATERIALS_FOLDER}/{file_name}"
+    if not _is_allowed_storage_path(storage_path):
+        return JSONResponse({"error": "Caminho de arquivo invalido."}, status_code=400)
 
     try:
         file_bytes = await asyncio.to_thread(
@@ -255,8 +388,9 @@ async def download_material_api(request: Request):
 
     return Response(
         content=file_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+        media_type=_media_type_for_storage_path(storage_path),
+        headers={
+            "Content-Disposition": f'attachment; filename="{Path(storage_path).name}"'},
     )
 
 
